@@ -1,0 +1,16 @@
+GEM
+  remote: http://rubygems.org/
+  specs:
+    json (1.8.2)
+    newrelic_plugin (1.3.1)
+      json
+    poseidon (0.0.5)
+    zookeeper (1.4.10)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  newrelic_plugin
+  poseidon
+  zookeeper
