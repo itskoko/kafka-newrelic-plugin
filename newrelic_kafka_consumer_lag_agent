@@ -47,12 +47,18 @@ module KafkaConsumerLagAgent
         end
       end
 
+      total_lags = []
+
       topics_offsets.each do |topic, offsets|
         consumers_offsets[topic].each do |consumer, consumer_offsets|
           lags = offsets.map { |partition, offset| offset.to_i - consumer_offsets[partition].to_i }
-          report_metric "/#{topic}/#{consumer}", "Lag", lags.inject(:+)
+          total_lag = lags.inject(:+)
+          total_lags << total_lag
+
+          report_metric "#{topic}/#{consumer}", "Lag", total_lag
         end
       end
+      report_metric "Max", "Lag", total_lags.max
     end
   end
 
