@@ -11,8 +11,8 @@ module KafkaConsumerLagAgent
 
     agent_guid "com.kareemk.kafka.consumer-lag"
     agent_version "0.0.1"
-    agent_config_options :host, :port
-    agent_human_labels("Kafka Consumer") { host }
+    agent_config_options :host, :port, :name
+    agent_human_labels("Kafka Consumer") { name }
 
     def poll_cycle
       zookeeper = Zookeeper.new("#{host}:#{port}")
