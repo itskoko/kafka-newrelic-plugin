@@ -59,6 +59,8 @@ module KafkaConsumerLagAgent
         end
       end
       report_metric "Max", "Lag", total_lags.max
+    ensure
+      zookeeper.close if zookeeper
     end
   end
 
