@@ -1,0 +1,9 @@
+newrelic:
+  license_key: <%= ENV['NEWRELIC_KEY'] %>
+  verbose: 1
+
+agents:
+  kafka_consumer_lag:
+    host: <%= ENV['ZOOKEEPER_HOST'] %>
+    port: <%= ENV['ZOOKEEPER_PORT'] %>
+    name: <%= ENV['NAME'] %>
