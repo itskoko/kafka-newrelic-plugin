@@ -55,21 +55,34 @@ module KafkaConsumerLagAgent
     end
 
     def get_topics_offsets
+      topics = zookeeper.get_children(path: '/brokers/topics')[:children]
+
+      broker_id = zookeeper.get_children(path: "/brokers/ids")[:children].first
+      broker = JSON.load(zookeeper.get(path: "/brokers/ids/#{broker_id}")[:data])
+      kafka  = Poseidon::Connection.new(broker["host"], broker["port"], "newrelic-conumser-lag", 1000)
+
+      topic_broker_partition_allocations = {}
+      kafka.topic_metadata(topics).topics.each do |topic|
+        topic.available_partitions.each do |partition|
+          topic_broker_partition_allocations[partition.leader] ||= {}
+          topic_broker_partition_allocations[partition.leader][topic.name] ||= []
+          topic_broker_partition_allocations[partition.leader][topic.name] << partition.id
+        end
+      end
+
       topics_offsets = {}
+      topic_broker_partition_allocations.each do |broker_id, allocation|
+        allocation.each do |topic, partitions|
+          broker = JSON.load(zookeeper.get(path: "/brokers/ids/#{broker_id}")[:data])
+          kafka  = Poseidon::Connection.new(broker["host"], broker["port"], "newrelic-conumser-lag", 1000)
 
-      zookeeper.get_children(path: '/brokers/topics')[:children].each do |topic|
-        partitions = zookeeper.get_children(path: "/brokers/topics/#{topic}/partitions")[:children]
+          partition_requests = partitions.map { |partition| Poseidon::Protocol::PartitionOffsetRequest.new(partition.to_i, -1, 1) }
+          offset_res = kafka.offset([Poseidon::Protocol::TopicOffsetRequest.new(topic, partition_requests)])
 
-        broker_id = zookeeper.get_children(path: "/brokers/ids")[:children].first
-        broker = JSON.load(zookeeper.get(path: "/brokers/ids/#{broker_id}")[:data])
-        kafka  = Poseidon::Connection.new(broker["host"], broker["port"], "newrelic-conumser-lag", 1000)
-
-        partition_requests = partitions.map { |partition| Poseidon::Protocol::PartitionOffsetRequest.new(partition.to_i, -1, 1) }
-        offset_res = kafka.offset([Poseidon::Protocol::TopicOffsetRequest.new(topic, partition_requests)])
-
-        offset_res[0].partition_offsets.each do |offset|
-          topics_offsets[topic] ||= {}
-          topics_offsets[topic][offset.partition] = offset.offsets.first.offset
+          offset_res[0].partition_offsets.each do |offset|
+            topics_offsets[topic] ||= {}
+            topics_offsets[topic][offset.partition] = offset.offsets.first.offset
+          end
         end
       end
 
