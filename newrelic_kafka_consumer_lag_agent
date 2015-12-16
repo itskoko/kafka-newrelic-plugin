@@ -15,8 +15,28 @@ module KafkaConsumerLagAgent
     agent_human_labels("Kafka Consumer") { name }
 
     def poll_cycle
-      zookeeper = Zookeeper.new("#{host}:#{port}")
+      consumers_offsets = get_consumers_offsets
+      topics_offsets    = get_topics_offsets
 
+      total_lags = []
+      topics_offsets.each do |topic, offsets|
+        consumers_offsets[topic].each do |consumer, consumer_offsets|
+          lags = offsets.map { |partition, offset| offset.to_i - consumer_offsets[partition].to_i }
+          total_lag = lags.inject(:+)
+          total_lags << total_lag
+
+          report_metric "#{topic}/#{consumer}", "Lag", total_lag
+        end
+      end
+      report_metric "Max", "Lag", total_lags.max
+    ensure
+      if @zookeeper
+        @zookeeper.close
+        @zookeeper = nil
+      end
+    end
+
+    def get_consumers_offsets
       consumers_offsets = {}
 
       zookeeper.get_children(path: '/consumers')[:children].each do |consumer|
@@ -31,11 +51,17 @@ module KafkaConsumerLagAgent
         end
       end
 
+      consumers_offsets
+    end
+
+    def get_topics_offsets
       topics_offsets = {}
 
       zookeeper.get_children(path: '/brokers/topics')[:children].each do |topic|
         partitions = zookeeper.get_children(path: "/brokers/topics/#{topic}/partitions")[:children]
-        broker = JSON.load(zookeeper.get(path: '/brokers/ids/0')[:data])
+
+        broker_id = zookeeper.get_children(path: "/brokers/ids")[:children].first
+        broker = JSON.load(zookeeper.get(path: "/brokers/ids/#{broker_id}")[:data])
         kafka  = Poseidon::Connection.new(broker["host"], broker["port"], "newrelic-conumser-lag", 1000)
 
         partition_requests = partitions.map { |partition| Poseidon::Protocol::PartitionOffsetRequest.new(partition.to_i, -1, 1) }
@@ -47,20 +73,11 @@ module KafkaConsumerLagAgent
         end
       end
 
-      total_lags = []
+      topics_offsets
+    end
 
-      topics_offsets.each do |topic, offsets|
-        consumers_offsets[topic].each do |consumer, consumer_offsets|
-          lags = offsets.map { |partition, offset| offset.to_i - consumer_offsets[partition].to_i }
-          total_lag = lags.inject(:+)
-          total_lags << total_lag
-
-          report_metric "#{topic}/#{consumer}", "Lag", total_lag
-        end
-      end
-      report_metric "Max", "Lag", total_lags.max
-    ensure
-      zookeeper.close if zookeeper
+    def zookeeper
+      @zookeeper ||= Zookeeper.new("#{host}:#{port}")
     end
   end
 
