@@ -77,11 +77,17 @@ module KafkaConsumerLagAgent
           kafka  = Poseidon::Connection.new(broker["host"], broker["port"], "newrelic-conumser-lag", 1000)
 
           partition_requests = partitions.map { |partition| Poseidon::Protocol::PartitionOffsetRequest.new(partition.to_i, -1, 1) }
-          offset_res = kafka.offset([Poseidon::Protocol::TopicOffsetRequest.new(topic, partition_requests)])
+          partition_requests.each do |partition_request|
+            begin
+              offset_res = kafka.offset([Poseidon::Protocol::TopicOffsetRequest.new(topic, [partition_request])])
 
-          offset_res[0].partition_offsets.each do |offset|
-            topics_offsets[topic] ||= {}
-            topics_offsets[topic][offset.partition] = offset.offsets.first.offset
+              offset_res[0].partition_offsets.each do |offset|
+                topics_offsets[topic] ||= {}
+                topics_offsets[topic][offset.partition] = offset.offsets.first.offset
+              end
+            rescue => e
+              puts "Failed to fetch #{topic}:#{partition_request.partition}:#{e.message}"
+            end
           end
         end
       end
