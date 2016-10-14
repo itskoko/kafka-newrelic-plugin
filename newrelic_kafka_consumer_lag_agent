@@ -14,6 +14,8 @@ module KafkaConsumerLagAgent
     agent_config_options :host, :port, :name
     agent_human_labels("Kafka Consumer") { name }
 
+    CONSUMER_FILTER = ENV["CONSUMER_FILTER"] || ".*"
+
     def poll_cycle
       consumers_offsets = get_consumers_offsets
       topics_offsets    = get_topics_offsets
@@ -40,6 +42,13 @@ module KafkaConsumerLagAgent
       consumers_offsets = {}
 
       zookeeper.get_children(path: '/consumers')[:children].each do |consumer|
+        if consumer =~ /^#{CONSUMER_FILTER}$/
+          puts "Tracking: #{consumer}"
+        else
+          puts "Skipping: #{consumer}"
+          next
+        end
+
         zookeeper.get_children(path: "/consumers/#{consumer}/offsets")[:children].each do |topic|
           offsets = {}
           zookeeper.get_children(path: "/consumers/#{consumer}/offsets/#{topic}")[:children].each do |partition|
